@@ -1,0 +1,42 @@
+AUTO-CUT MODEL TRAINING REPORT
+==================================================
+
+LINE: b1 (blue/top)
+  CV MAE   : 0.0067  (0.67% of page height)
+  Train MAE: 0.0000
+  Range    : 0.010 – 0.078
+  Worst predictions:
+    page 17: pred=0.033  actual=0.033  err=0.000
+    page 19: pred=0.060  actual=0.060  err=0.000
+    page 13: pred=0.037  actual=0.037  err=0.000
+
+LINE: r1 (red/stem)
+  CV MAE   : 0.0766  (7.66% of page height)
+  Train MAE: 0.0001
+  Range    : 0.021 – 0.410
+  Worst predictions:
+    page 38: pred=0.395  actual=0.395  err=0.000
+    page 28: pred=0.182  actual=0.182  err=0.000
+    page 27: pred=0.370  actual=0.370  err=0.000
+
+LINE: r2 (orange/opts)
+  CV MAE   : 0.0949  (9.49% of page height)
+  Train MAE: 0.0001
+  Range    : 0.031 – 0.506
+  Worst predictions:
+    page 38: pred=0.483  actual=0.483  err=0.000
+    page 20: pred=0.220  actual=0.220  err=0.000
+    page 28: pred=0.224  actual=0.225  err=0.000
+
+LINE: b2 (purple/exp)
+  CV MAE   : 0.0399  (3.99% of page height)
+  Train MAE: 0.0000
+  Range    : 0.547 – 0.949
+  Worst predictions:
+    page 43: pred=0.547  actual=0.547  err=0.000
+    page 12: pred=0.833  actual=0.833  err=0.000
+    page 40: pred=0.934  actual=0.935  err=0.000
+
+Total training samples: 50
+Feature vector size   : 175
+Render DPI            : 72
