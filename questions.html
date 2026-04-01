@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Questions — P2E{% endblock %}
+{% block content %}
+<div class="max-w-6xl space-y-5 fade-in">
+
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Questions</h1>
+    <p class="text-sm text-gray-500 mt-0.5" id="q-count">Loading…</p>
+  </div>
+
+  <!-- Filters -->
+  <div class="neo-card-flat p-4 flex flex-wrap gap-3 items-center">
+    <div class="relative flex-1 min-w-48">
+      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+      <input id="search-input" type="text" placeholder="Search question text…"
+             class="neo-input pl-9">
+    </div>
+    <select id="filter-subject" class="neo-select">
+      <option value="">All Subjects</option>
+    </select>
+    <select id="filter-exam" class="neo-select">
+      <option value="">All Exams</option>
+      <option value="NEET PG">NEET PG</option>
+      <option value="INICET">INICET</option>
+      <option value="FMGE">FMGE</option>
+    </select>
+    <select id="filter-answer" class="neo-select">
+      <option value="">All Answers</option>
+      <option>A</option><option>B</option><option>C</option><option>D</option>
+    </select>
+    <button onclick="resetFilters()"
+            class="neo-btn neo-btn-white text-sm px-4 py-2">Reset</button>
+  </div>
+
+  <!-- Table -->
+  <div class="neo-card overflow-hidden">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="bg-[#0f172a] text-white text-left text-xs uppercase tracking-wide">
+          <th class="px-4 py-3">ID</th>
+          <th class="px-4 py-3">Subject</th>
+          <th class="px-4 py-3">Exam</th>
+          <th class="px-4 py-3">Question</th>
+          <th class="px-4 py-3 text-center">Ans</th>
+          <th class="px-4 py-3 text-center">Img</th>
+        </tr>
+      </thead>
+      <tbody id="q-tbody" class="divide-y-2 divide-[#f3f4f6]">
+        <tr><td colspan="6" class="px-4 py-10 text-center text-gray-400">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="flex items-center justify-between" id="pagination">
+    <p class="text-sm text-gray-500" id="page-info"></p>
+    <div class="flex items-center gap-2">
+      <button id="btn-prev" onclick="changePage(-1)"
+              class="neo-btn neo-btn-white text-sm px-3 py-2">← Prev</button>
+      <span id="page-num" class="text-sm font-bold text-gray-700 px-2"></span>
+      <button id="btn-next" onclick="changePage(1)"
+              class="neo-btn neo-btn-white text-sm px-3 py-2">Next →</button>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const LIMIT = 50;
+let offset  = 0;
+let total   = 0;
+let timer   = null;
+let filters = { q:'', subject:'', exam_type:'', answer:'' };
+
+const SUBJ_BG = {
+  anatomy:'#92400e', physiology:'#1e3a5f', biochemistry:'#064e3b',
+  pathology:'#7f1d1d', pharmacology:'#4c1d95', microbiology:'#134e4a',
+  medicine:'#1e293b', surgery:'#0f172a', psm:'#164e63',
+  ophthalmology:'#312e81', ent:'#3b0764', pediatrics:'#065f46',
+  orthopedics:'#7c2d12', radiology:'#111827', dermatology:'#831843',
+  psychiatry:'#4a1d96', anaesthesia:'#134e4a', obgyn:'#881337',
+  forensic:'#27272a',
+};
+
+const EXAM_BG = { 'NEET PG':'#7c3aed', 'INICET':'#b45309', 'FMGE':'#0369a1' };
+
+function subjBadge(s) {
+  const bg = SUBJ_BG[s] || '#6b7280';
+  return `<span class="neo-badge" style="background:${bg};color:#fff;font-size:10px;text-transform:capitalize">${s||'?'}</span>`;
+}
+function examBadge(e) {
+  if (!e) return '—';
+  const bg = EXAM_BG[e] || '#6b7280';
+  return `<span class="neo-badge" style="background:${bg};color:#fff;font-size:10px">${e}</span>`;
+}
+
+async function loadSubjects() {
+  const d = await api('/api/subjects');
+  const sel = document.getElementById('filter-subject');
+  (d||[]).forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.subject; o.textContent = s.subject[0].toUpperCase()+s.subject.slice(1);
+    sel.appendChild(o);
+  });
+}
+
+async function loadQuestions() {
+  const p = new URLSearchParams({ limit: LIMIT, offset });
+  if (filters.q)         p.set('q',         filters.q);
+  if (filters.subject)   p.set('subject',   filters.subject);
+  if (filters.exam_type) p.set('exam_type', filters.exam_type);
+  if (filters.answer)    p.set('answer',    filters.answer);
+
+  const d   = await api('/api/questions?' + p);
+  total     = d.total || 0;
+
+  document.getElementById('q-count').textContent =
+    `${total.toLocaleString()} question${total !== 1 ? 's' : ''}`;
+
+  const rows = d.questions || [];
+  const tbody = document.getElementById('q-tbody');
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-10 text-center text-gray-400">
+      No questions found</td></tr>`;
+    updatePager();
+    return;
+  }
+
+  tbody.innerHTML = rows.map(q => {
+    const ans = q.answer
+      ? `<span class="w-7 h-7 rounded-full bg-green-700 text-white text-xs font-black
+                       inline-flex items-center justify-center">${q.answer}</span>`
+      : `<span class="w-7 h-7 rounded-full bg-red-400 text-white text-xs font-black
+                       inline-flex items-center justify-center">?</span>`;
+
+    const hasImg = q.question_image || q.explanation_image || (q.images && q.images.length);
+    const img = hasImg ? `<span class="text-xs text-amber-600">🖼</span>` : '';
+
+    return `
+      <tr class="hover:bg-blue-50/30 transition-colors">
+        <td class="px-4 py-3">
+          <a href="/q/${encodeURIComponent(q.question_id)}"
+             class="text-blue-600 hover:underline font-mono text-xs">
+            ${q.question_id}
+          </a>
+        </td>
+        <td class="px-4 py-3">${subjBadge(q.subject||'')}</td>
+        <td class="px-4 py-3">${examBadge(q.exam_type)}</td>
+        <td class="px-4 py-3 text-gray-700 max-w-xs">
+          <p class="truncate text-sm">${q.question || q.question_id}</p>
+          ${q.topic ? `<p class="text-xs text-gray-400 truncate mt-0.5">📍 ${q.topic}</p>` : ''}
+        </td>
+        <td class="px-4 py-3 text-center">${ans}</td>
+        <td class="px-4 py-3 text-center">${img}</td>
+      </tr>`;
+  }).join('');
+
+  updatePager();
+}
+
+function updatePager() {
+  const pages = Math.ceil(total / LIMIT);
+  const cur   = Math.floor(offset / LIMIT) + 1;
+  document.getElementById('page-info').textContent =
+    `Showing ${Math.min(offset+1,total)}–${Math.min(offset+LIMIT,total)} of ${total.toLocaleString()}`;
+  document.getElementById('page-num').textContent  = `${cur} / ${Math.max(1,pages)}`;
+  document.getElementById('btn-prev').disabled = cur <= 1;
+  document.getElementById('btn-next').disabled = cur >= pages;
+  document.getElementById('pagination').style.display = pages > 1 ? 'flex' : 'none';
+}
+
+function changePage(dir) {
+  offset = Math.max(0, offset + dir * LIMIT);
+  loadQuestions();
+  window.scrollTo(0, 0);
+}
+
+function resetFilters() {
+  filters = { q:'', subject:'', exam_type:'', answer:'' };
+  ['search-input','filter-subject','filter-exam','filter-answer'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  offset = 0;
+  loadQuestions();
+}
+
+// Events
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(timer);
+  timer = setTimeout(() => { filters.q = e.target.value; offset=0; loadQuestions(); }, 400);
+});
+document.getElementById('filter-subject').addEventListener('change', e => {
+  filters.subject = e.target.value; offset=0; loadQuestions();
+});
+document.getElementById('filter-exam').addEventListener('change', e => {
+  filters.exam_type = e.target.value; offset=0; loadQuestions();
+});
+document.getElementById('filter-answer').addEventListener('change', e => {
+  filters.answer = e.target.value; offset=0; loadQuestions();
+});
+
+loadSubjects();
+loadQuestions();
+</script>
+{% endblock %}

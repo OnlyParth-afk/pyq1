@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Topics — P2E{% endblock %}
+{% block content %}
+<div class="max-w-5xl space-y-6 fade-in">
+
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Topics</h1>
+      <p class="text-sm text-gray-500 mt-0.5" id="topic-sub">Loading…</p>
+    </div>
+    <div class="relative">
+      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+      <input id="topic-search" type="text" placeholder="Search topics…"
+        class="pl-9 pr-4 py-2 rounded-lg border border-gray-200 text-sm
+               focus:outline-none focus:ring-2 focus:ring-blue-500 w-48">
+    </div>
+  </div>
+
+  <!-- Subject tabs -->
+  <div class="flex gap-2 flex-wrap" id="subj-tabs"></div>
+
+  <!-- Topic grid -->
+  <div id="topic-grid"
+       class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="col-span-full text-center py-10 text-gray-400">Loading…</div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allTopics  = [];
+let selSubject = '';
+let searchQ    = '';
+
+const SUBJ_COL = {
+  anatomy:'#92400e',physiology:'#1e3a5f',biochemistry:'#064e3b',
+  pathology:'#7f1d1d',pharmacology:'#4c1d95',microbiology:'#134e4a',
+  medicine:'#1e293b',surgery:'#0f172a',psm:'#164e63',
+  ophthalmology:'#312e81',ent:'#3b0764',pediatrics:'#065f46',
+  orthopedics:'#7c2d12',radiology:'#111827',dermatology:'#831843',
+  psychiatry:'#4a1d96',anaesthesia:'#134e4a',obgyn:'#881337',
+  forensic:'#27272a',
+};
+
+async function loadTopics() {
+  const [hmap, subs] = await Promise.all([
+    api('/api/analytics/heatmap'),
+    api('/api/subjects'),
+  ]);
+
+  allTopics = hmap.heatmap||[];
+  const subjects = (subs||[]).map(s=>s.subject);
+
+  document.getElementById('topic-sub').textContent =
+    `${allTopics.length} topics across ${subjects.length} subjects`;
+
+  // Subject tabs
+  const tabs = document.getElementById('subj-tabs');
+  tabs.innerHTML = `
+    <button onclick="filterSubject('')" data-sub=""
+      class="px-3 py-1.5 rounded-full text-xs font-medium border
+             border-blue-500 bg-blue-50 text-blue-700">
+      All
+    </button>` +
+    subjects.map(s=>`
+      <button onclick="filterSubject('${s}')" data-sub="${s}"
+        class="px-3 py-1.5 rounded-full text-xs font-medium border
+               border-gray-200 text-gray-600 hover:border-blue-300
+               hover:text-blue-600 capitalize transition-all">
+        ${s}
+      </button>`).join('');
+
+  renderGrid();
+}
+
+function filterSubject(sub) {
+  selSubject = sub;
+  document.querySelectorAll('[data-sub]').forEach(b=>{
+    const active = b.dataset.sub === sub;
+    b.className = b.className
+      .replace('border-blue-500 bg-blue-50 text-blue-700',
+               'border-gray-200 text-gray-600')
+      .replace('border-gray-200 text-gray-600',
+               active ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 text-gray-600');
+  });
+  renderGrid();
+}
+
+function renderGrid() {
+  let topics = allTopics;
+  if(selSubject) topics = topics.filter(t=>t.subject===selSubject);
+  if(searchQ)    topics = topics.filter(t=>
+    (t.topic||'').toLowerCase().includes(searchQ.toLowerCase())
+  );
+
+  const grid = document.getElementById('topic-grid');
+  if(!topics.length) {
+    grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">No topics found</div>';
+    return;
+  }
+
+  grid.innerHTML = topics.map(t=>{
+    const acc = t.accuracy||0;
+    const col = SUBJ_COL[t.subject]||'#6b7280';
+    const bar = acc>=70?'bg-green-500':acc>=50?'bg-amber-500':'bg-red-400';
+    return `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5
+                  hover:shadow-md transition-shadow">
+        <div class="flex items-start justify-between gap-2 mb-3">
+          <p class="font-medium text-gray-800 text-sm leading-snug">
+            ${t.topic||'—'}
+          </p>
+          <span class="shrink-0 text-xs text-white px-2 py-0.5 rounded-full
+                       capitalize" style="background:${col}">
+            ${t.subject}
+          </span>
+        </div>
+        <div class="space-y-2">
+          <div class="w-full bg-gray-100 rounded-full h-2">
+            <div class="h-2 rounded-full ${bar} transition-all"
+                 style="width:${acc}%"></div>
+          </div>
+          <div class="flex justify-between text-xs text-gray-500">
+            <span>${t.total_seen||0} seen</span>
+            <span class="font-semibold
+              ${acc>=70?'text-green-600':acc>=50?'text-amber-500':'text-red-500'}">
+              ${acc}%
+            </span>
+          </div>
+        </div>
+        <a href="/study?mode=custom&subject=${encodeURIComponent(t.subject)}"
+           class="mt-3 block text-xs text-blue-600 hover:underline">
+          Drill this topic →
+        </a>
+      </div>`;
+  }).join('');
+}
+
+let searchTimer;
+document.getElementById('topic-search').addEventListener('input', e=>{
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(()=>{
+    searchQ = e.target.value;
+    renderGrid();
+  }, 300);
+});
+
+loadTopics();
+</script>
+{% endblock %}

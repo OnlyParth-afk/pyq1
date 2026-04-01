@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Edit Question — P2E{% endblock %}
+{% block content %}
+<div class="max-w-3xl space-y-4 fade-in" id="editor-root">
+  <div class="text-center py-16 text-gray-400">Loading…</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SP      = new URLSearchParams(location.search);
+const PDF_STEM= SP.get('pdf')||'';
+const Q_ID    = SP.get('q')||'';
+let qData     = null;
+let auditOn   = false;
+let pending   = {};
+
+async function init() {
+  const [ar, qr] = await Promise.all([
+    api('/api/audit/status'),
+    api(`/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}`),
+  ]);
+  auditOn = ar.audit_mode;
+  qData   = qr;
+  render();
+}
+
+function dis(extra='') {
+  return auditOn ? extra
+    : 'disabled title="Enable Audit Mode to edit"';
+}
+function lockCls() {
+  return auditOn ? '' : 'opacity-50 cursor-not-allowed';
+}
+
+function render() {
+  const q = qData;
+  const flags = q.flags||[];
+
+  const flagBadges = flags.map(f=>{
+    const col = f==='approved'?'green':
+                f.startsWith('bleed')?'orange':
+                f==='missing_answer'?'red':'gray';
+    return `<span class="px-2 py-0.5 rounded-full text-xs
+      bg-${col}-100 text-${col}-700">${f}</span>`;
+  }).join('');
+
+  const optRows = ['A','B','C','D'].map(l=>{
+    const text  = (q.options||{})[l]||'';
+    const isAns = q.answer===l;
+    return `
+      <div class="flex gap-3 items-start border-2 rounded-xl p-3 transition-all
+                  ${isAns?'border-green-500 bg-green-50':'border-gray-200 bg-white'}">
+        <span class="w-7 h-7 rounded-full flex items-center justify-center
+               font-bold text-xs shrink-0
+               ${isAns?'bg-green-600 text-white':'bg-gray-100 text-gray-600'}">
+          ${l}
+        </span>
+        <textarea id="opt-${l}" rows="2" ${dis()}
+          oninput="pending.options=pending.options||{};pending.options['${l}']=this.value"
+          class="flex-1 text-sm resize-none border-none outline-none
+                 bg-transparent ${lockCls()}"
+        >${text}</textarea>
+        <button onclick="setAnswer('${l}')" ${dis()}
+          class="shrink-0 text-xs px-2.5 py-1.5 rounded-lg border
+                 transition-all ${lockCls()}
+                 ${isAns?'bg-green-600 text-white border-green-600':
+                   'border-gray-300 text-gray-500 hover:border-green-400'}">
+          ${isAns?'✓ Ans':'Mark ✓'}
+        </button>
+      </div>`;
+  }).join('');
+
+  const imgRows = (q.images||[]).map(img=>`
+    <div class="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
+      <img src="/images/${img}"
+           class="h-20 rounded-lg border object-contain cursor-zoom-in"
+           onclick="lightbox('/images/${img}')">
+      <div class="flex-1 text-xs text-gray-400 break-all">${img}</div>
+      <div class="flex flex-col gap-1.5 shrink-0">
+        <button onclick="moveImg('${img}','up')" ${dis()}
+          class="text-xs px-2 py-1 rounded border hover:bg-gray-100 ${lockCls()}">
+          ↑ Up
+        </button>
+        <button onclick="moveImg('${img}','down')" ${dis()}
+          class="text-xs px-2 py-1 rounded border hover:bg-gray-100 ${lockCls()}">
+          ↓ Down
+        </button>
+        <button onclick="removeImg('${img}')" ${dis()}
+          class="text-xs px-2 py-1 rounded border border-red-200
+                 text-red-600 hover:bg-red-50 ${lockCls()}">
+          Remove
+        </button>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('editor-root').innerHTML = `
+    <!-- Nav -->
+    <div class="flex items-center gap-3 flex-wrap">
+      <a href="/review/${encodeURIComponent(PDF_STEM)}"
+         class="text-sm text-blue-600 hover:underline">← Back to PDF</a>
+      <span class="text-gray-300">|</span>
+      <span class="text-xs font-mono text-gray-400">${Q_ID}</span>
+      <span class="ml-auto text-xs px-3 py-1 rounded-full
+        ${auditOn?'bg-orange-100 text-orange-700':'bg-gray-100 text-gray-500'}">
+        ${auditOn?'🔓 Editing enabled':'🔒 Read only'}
+      </span>
+    </div>
+
+    <!-- Flags -->
+    ${flags.length?`<div class="flex flex-wrap gap-1.5">${flagBadges}</div>`:''}
+
+    <!-- Metadata -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+      <h3 class="font-semibold text-gray-700 text-sm">Metadata</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-500 block mb-1">Subject</label>
+          <input id="f-subject" value="${q.subject||''}" ${dis()}
+            oninput="pending.subject=this.value"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500
+                   disabled:opacity-40 ${lockCls()}">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 block mb-1">Topic</label>
+          <input id="f-topic" value="${q.topic||''}" ${dis()}
+            oninput="pending.topic=this.value"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500
+                   disabled:opacity-40 ${lockCls()}">
+        </div>
+      </div>
+    </div>
+
+    <!-- Question stem -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="font-semibold text-gray-700 text-sm">Question Stem</h3>
+        <button onclick="autoClean('question')" ${dis()}
+          class="text-xs px-3 py-1 rounded-lg bg-orange-50 text-orange-700
+                 border border-orange-200 hover:bg-orange-100 ${lockCls()}">
+          🧹 Auto-clean
+        </button>
+      </div>
+      <textarea id="f-question" rows="4" ${dis()}
+        oninput="pending.question=this.value"
+        class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+               focus:outline-none focus:ring-2 focus:ring-blue-500
+               disabled:opacity-40 resize-y ${lockCls()}"
+      >${q.question||''}</textarea>
+    </div>
+
+    <!-- Images -->
+    ${(q.images||[]).length?`
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+        <h3 class="font-semibold text-gray-700 text-sm">
+          Images (${q.images.length})
+        </h3>
+        <div class="space-y-2">${imgRows}</div>
+      </div>`:''}
+
+    <!-- Options -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+      <h3 class="font-semibold text-gray-700 text-sm">Options</h3>
+      <div class="space-y-2">${optRows}</div>
+      <div class="flex gap-2 pt-1 flex-wrap">
+        ${['A','B','C','D'].map(l=>`
+          <button onclick="mergeInto('${l}')" ${dis()}
+            class="text-xs px-2.5 py-1 rounded-lg border border-gray-200
+                   text-gray-500 hover:border-blue-300 ${lockCls()}">
+            Merge into ${l}
+          </button>`).join('')}
+      </div>
+    </div>
+
+    <!-- Explanation -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="font-semibold text-gray-700 text-sm">Explanation</h3>
+        <button onclick="autoClean('explanation')" ${dis()}
+          class="text-xs px-3 py-1 rounded-lg bg-orange-50 text-orange-700
+                 border border-orange-200 hover:bg-orange-100 ${lockCls()}">
+          🧹 Auto-clean
+        </button>
+      </div>
+      <textarea id="f-explanation" rows="6" ${dis()}
+        oninput="pending.explanation=this.value"
+        class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+               focus:outline-none focus:ring-2 focus:ring-blue-500
+               disabled:opacity-40 resize-y ${lockCls()}"
+      >${q.explanation||''}</textarea>
+    </div>
+
+    <!-- Action bar -->
+    <div class="flex gap-3 flex-wrap pb-10">
+      <button onclick="saveAll()" ${dis()}
+        class="flex-1 py-3 rounded-xl bg-blue-700 text-white font-semibold
+               hover:bg-blue-600 transition-colors disabled:opacity-40
+               disabled:cursor-not-allowed">
+        💾 Save All Changes
+      </button>
+      <button onclick="approveQ()" ${dis()}
+        class="px-5 py-3 rounded-xl bg-green-700 text-white font-semibold
+               hover:bg-green-600 disabled:opacity-40 ${lockCls()}">
+        ✓ Approve
+      </button>
+      <button onclick="undoLast()" ${dis()}
+        class="px-5 py-3 rounded-xl bg-gray-200 text-gray-700 font-semibold
+               hover:bg-gray-300 disabled:opacity-40 ${lockCls()}">
+        ↩ Undo
+      </button>
+      <button onclick="flagBad()" ${dis()}
+        class="px-4 py-3 rounded-xl bg-red-50 text-red-700 font-semibold
+               border border-red-200 hover:bg-red-100 disabled:opacity-40
+               ${lockCls()}">
+        🚩 Flag
+      </button>
+    </div>`;
+}
+
+// ── Actions ───────────────────────────────────────────────────────
+
+async function saveAll() {
+  if(!Object.keys(pending).length){toast('No changes','info');return;}
+  const r = await apiPatch(
+    `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}`,
+    pending
+  );
+  if(r.ok) {
+    toast(`✓ Saved (${r.changes} changes)`,'success');
+    pending = {};
+    qData = await api(
+      `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}`
+    );
+    render();
+  } else {
+    toast(r.message||'Save failed','error');
+  }
+}
+
+async function setAnswer(letter) {
+  const r = await apiPost(
+    `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}/answer`,
+    {answer:letter}
+  );
+  if(r.ok){
+    toast(`✓ Answer set to ${letter}`,'success');
+    qData.answer = letter;
+    qData.flags  = (qData.flags||[]).filter(f=>f!=='missing_answer');
+    render();
+  }
+}
+
+async function autoClean(field) {
+  const PATS = [
+    '©\\s*[Mm]arrow',
+    '\\b[a-fA-F0-9]{8,}\\b',
+    '\\[[a-zA-Z0-9]{1,3}%\\]',
+    '\\b(SOLVE|NEXT|BOOKMARK|COMPLETE)\\b',
+  ];
+  for(const pattern of PATS) {
+    await apiPost(
+      `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}/remove-bleed`,
+      {field, pattern}
+    );
+  }
+  toast(`✓ Auto-cleaned ${field}`,'success');
+  qData = await api(
+    `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}`
+  );
+  render();
+}
+
+async function moveImg(filename, direction) {
+  const r = await apiPost(
+    `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}/move-image`,
+    {filename, direction}
+  );
+  if(r.ok){toast('✓ Image moved');qData.images=r.images;render();}
+}
+
+async function removeImg(filename) {
+  if(!confirm('Remove this image?')) return;
+  const r = await apiPost(
+    `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}/remove-image`,
+    {filename}
+  );
+  if(r.ok){toast('✓ Removed');qData.images=r.images;render();}
+}
+
+async function mergeInto(into) {
+  const frm = prompt(`Merge which option INTO ${into}?`);
+  if(!frm||frm.toUpperCase()===into) return;
+  const r = await apiPost(
+    `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}/merge-options`,
+    {from:frm.toUpperCase(), into}
+  );
+  if(r.ok){toast(`✓ Merged ${frm}→${into}`);qData.options=r.options;render();}
+  else toast(r.error||'Error','error');
+}
+
+async function approveQ() {
+  const r = await apiPost(
+    `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/question/${encodeURIComponent(Q_ID)}/approve`
+  );
+  if(r.ok){
+    toast('✓ Approved','success');
+    if(!qData.flags.includes('approved')) qData.flags.push('approved');
+    render();
+  }
+}
+
+async function undoLast() {
+  const r = await apiPost(
+    `/api/review/pdf/${encodeURIComponent(PDF_STEM)}/undo`
+  );
+  if(r.ok){
+    toast(`↩ Reverted: ${r.reverted?.action||'last change'}`,'info');
+    qData = await api(
+      `/api

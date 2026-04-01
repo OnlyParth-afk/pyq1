@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}P2E MCQ Bank{% endblock %}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  /* ── Neo-Brutalism Base ─────────────────────────────────────── */
+  :root {
+    --black      : #111111;
+    --white      : #FFFFFF;
+    --bg         : #F5F5F0;
+    --yellow     : #FFE500;
+    --green      : #00C853;
+    --purple     : #7C3AED;
+    --coral      : #FF6B6B;
+    --blue       : #3B82F6;
+    --shadow     : 4px 4px 0px var(--black);
+    --shadow-sm  : 2px 2px 0px var(--black);
+    --shadow-lg  : 6px 6px 0px var(--black);
+    --border     : 2px solid var(--black);
+    --radius     : 12px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background : var(--bg);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color      : var(--black);
+  }
+
+  /* ── Neo card ────────────────────────────────────────────────── */
+  .neo-card {
+    background   : var(--white);
+    border       : var(--border);
+    border-radius: var(--radius);
+    box-shadow   : var(--shadow);
+    transition   : transform 0.1s ease, box-shadow 0.1s ease;
+  }
+  .neo-card:hover {
+    transform  : translate(-1px, -1px);
+    box-shadow : 5px 5px 0px var(--black);
+  }
+  .neo-card-flat {
+    background   : var(--white);
+    border       : var(--border);
+    border-radius: var(--radius);
+  }
+
+  /* ── Neo button ──────────────────────────────────────────────── */
+  .neo-btn {
+    display      : inline-flex;
+    align-items  : center;
+    justify-content: center;
+    gap          : 6px;
+    padding      : 10px 20px;
+    font-weight  : 700;
+    font-size    : 14px;
+    border       : var(--border);
+    border-radius: 10px;
+    box-shadow   : var(--shadow-sm);
+    cursor       : pointer;
+    transition   : transform 0.1s, box-shadow 0.1s;
+    text-decoration: none;
+    white-space  : nowrap;
+  }
+  .neo-btn:hover {
+    transform  : translate(-1px, -1px);
+    box-shadow : 3px 3px 0px var(--black);
+  }
+  .neo-btn:active {
+    transform  : translate(1px, 1px);
+    box-shadow : 1px 1px 0px var(--black);
+  }
+  .neo-btn-primary   { background: var(--blue);   color: #fff; }
+  .neo-btn-yellow    { background: var(--yellow);  color: var(--black); }
+  .neo-btn-green     { background: var(--green);   color: #fff; }
+  .neo-btn-purple    { background: var(--purple);  color: #fff; }
+  .neo-btn-coral     { background: var(--coral);   color: #fff; }
+  .neo-btn-white     { background: var(--white);   color: var(--black); }
+  .neo-btn-black     { background: var(--black);   color: #fff; }
+
+  /* ── Neo badge ───────────────────────────────────────────────── */
+  .neo-badge {
+    display      : inline-block;
+    padding      : 3px 10px;
+    font-size    : 11px;
+    font-weight  : 700;
+    border       : 1.5px solid var(--black);
+    border-radius: 20px;
+    box-shadow   : 1px 1px 0px var(--black);
+  }
+
+  /* ── Neo input ───────────────────────────────────────────────── */
+  .neo-input {
+    width        : 100%;
+    padding      : 10px 14px;
+    border       : var(--border);
+    border-radius: 10px;
+    font-size    : 14px;
+    background   : var(--white);
+    box-shadow   : var(--shadow-sm);
+    outline      : none;
+    transition   : box-shadow 0.1s;
+  }
+  .neo-input:focus {
+    box-shadow: 3px 3px 0px var(--blue);
+    border-color: var(--blue);
+  }
+  .neo-input:disabled {
+    opacity: 0.5;
+    cursor : not-allowed;
+  }
+
+  /* ── Neo select ──────────────────────────────────────────────── */
+  .neo-select {
+    padding      : 10px 14px;
+    border       : var(--border);
+    border-radius: 10px;
+    font-size    : 14px;
+    background   : var(--white);
+    box-shadow   : var(--shadow-sm);
+    outline      : none;
+    cursor       : pointer;
+    appearance   : none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23111' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+  }
+  .neo-select:focus {
+    box-shadow: 3px 3px 0px var(--blue);
+    border-color: var(--blue);
+  }
+
+  /* ── Neo progress bar ────────────────────────────────────────── */
+  .neo-progress-track {
+    width        : 100%;
+    height       : 12px;
+    background   : #E5E5E5;
+    border       : 1.5px solid var(--black);
+    border-radius: 6px;
+    overflow     : hidden;
+  }
+  .neo-progress-fill {
+    height        : 100%;
+    border-radius : 4px;
+    transition    : width 0.4s ease;
+  }
+
+  /* ── Animations ──────────────────────────────────────────────── */
+  .fade-in {
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity:0; transform:translateY(8px); }
+    to   { opacity:1; transform:translateY(0);   }
+  }
+
+  /* ── Scrollbar ───────────────────────────────────────────────── */
+  ::-webkit-scrollbar       { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:#1e3a5f; }
+  ::-webkit-scrollbar-thumb { background:#3b82f6; border-radius:3px; }
+
+  /* ── Question content ────────────────────────────────────────── */
+  .q-content b, .q-content strong { font-weight:700; }
+  .q-content i, .q-content em     { font-style:italic; }
+  .q-content p { margin-bottom:0.4rem; }
+
+  /* ── Section header ──────────────────────────────────────────── */
+  .section-title {
+    font-size  : 18px;
+    font-weight: 800;
+    color      : var(--black);
+    letter-spacing: -0.3px;
+  }
+
+  /* ── Dot pattern bg ──────────────────────────────────────────── */
+  .dot-bg {
+    background-image: radial-gradient(#d4d4d0 1px, transparent 1px);
+    background-size : 20px 20px;
+  }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Sidebar ───────────────────────────────────────────────────── -->
+<aside class="fixed left-0 top-0 h-full w-56
+              bg-[#0F172A] flex flex-col z-30"
+       style="border-right:2px solid #1e293b">
+
+  <!-- Logo -->
+  <div class="px-5 py-4" style="border-bottom:2px solid #1e3a5f">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center
+                  font-black text-xl text-[#0F172A]"
+           style="background:var(--yellow);
+                  border:2px solid #111;
+                  box-shadow:2px 2px 0px #111">
+        P
+      </div>
+      <div>
+        <p class="text-white font-black text-sm leading-tight
+                  tracking-tight">P2E</p>
+        <p class="text-blue-400 text-xs font-medium">NEET PG MCQ Bank</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav class="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+    {% set nav = [
+      ('/',          '🏠', 'Dashboard'),
+      ('/questions', '📋', 'Questions'),
+      ('/study',     '🎯', 'Study'),
+      ('/analytics', '📊', 'Analytics'),
+      ('/topics',    '🗂',  'Topics'),
+      ('/most-repeated', '🔁', 'Most Repeated'),
+      ('/review',    '🔍', 'Review'),
+    ] %}
+    {% for href, icon, label in nav %}
+    <a href="{{ href }}"
+       class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm
+              font-semibold transition-all
+              {% if request.path == href %}
+                text-[#0F172A]
+              {% else %}
+                text-blue-300 hover:text-white hover:bg-blue-900/40
+              {% endif %}"
+       {% if request.path == href %}
+         style="background:var(--yellow);
+                border:2px solid #111;
+                box-shadow:2px 2px 0px #111;
+                color:#111"
+       {% endif %}>
+      <span class="text-base">{{ icon }}</span>
+      {{ label }}
+    </a>
+    {% endfor %}
+  </nav>
+
+  <!-- Bottom stats -->
+  <div class="px-4 py-3" style="border-top:2px solid #1e3a5f">
+    <div class="space-y-2">
+      <div class="flex justify-between items-center">
+        <span class="text-xs text-blue-400 font-medium">🔥 Streak</span>
+        <span id="sb-streak"
+              class="text-xs font-black text-white">—</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-xs text-blue-400 font-medium">📅 Due</span>
+        <span id="sb-due"
+              class="text-xs font-black text-white">—</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-xs text-blue-400 font-medium">✅ Today</span>
+        <span id="sb-today"
+              class="text-xs font-black text-white">—</span>
+      </div>
+      <!-- Mini progress -->
+      <div class="neo-progress-track mt-1"
+           style="height:8px;border-color:#334155">
+        <div id="sb-bar"
+             class="neo-progress-fill"
+             style="width:0%;background:var(--yellow)"></div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ── Main ──────────────────────────────────────────────────────── -->
+<main class="ml-56 min-h-screen p-6 md:p-8 dot-bg">
+  {% block content %}{% endblock %}
+</main>
+
+<!-- ── Toast ─────────────────────────────────────────────────────── -->
+<div id="toast-container"
+     class="fixed bottom-6 right-6 z-50 flex flex-col gap-2
+            pointer-events-none">
+</div>
+
+<!-- ── Global JS ─────────────────────────────────────────────────── -->
+<script>
+function toast(msg, type='success') {
+  const bg = {
+    success: 'var(--green)',
+    error  : 'var(--coral)',
+    warn   : 'var(--yellow)',
+    info   : 'var(--blue)',
+  };
+  const tc = type==='warn' ? 'var(--black)' : '#fff';
+  const el = document.createElement('div');
+  el.className = 'pointer-events-auto fade-in';
+  el.style.cssText = `
+    padding:12px 18px;border-radius:10px;
+    border:2px solid #111;
+    box-shadow:3px 3px 0px #111;
+    background:${bg[type]||bg.info};
+    color:${tc};
+    font-size:14px;font-weight:700;
+    max-width:280px;
+  `;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>el.remove(), 2800);
+}
+
+async function loadSidebarStats() {
+  try {
+    const d = await fetch('/api/analytics/overview').then(r=>r.json());
+    const s = d.stats||{};
+    const today = s.today_count||0;
+    const pct   = Math.min(100, Math.round(today/100*100));
+    document.getElementById('sb-streak').textContent = (s.streak||0)+' days';
+    document.getElementById('sb-due').textContent    = s.due_today||0;
+    document.getElementById('sb-today').textContent  = today+'/100';
+    document.getElementById('sb-bar').style.width    = pct+'%';
+  } catch(e){}
+}
+loadSidebarStats();
+
+async function api(url,opts={}) {
+  const r = await fetch(url,{
+    headers:{'Content-Type':'application/json'},...opts
+  });
+  return r.json();
+}
+async function apiPost(url,body={}) {
+  return api(url,{method:'POST',body:JSON.stringify(body)});
+}
+async function apiPatch(url,body={}) {
+  return api(url,{method:'PATCH',body:JSON.stringify(body)});
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

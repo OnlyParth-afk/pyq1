@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Review — P2E{% endblock %}
+{% block content %}
+
+<!-- Audit banner -->
+<div id="audit-banner"
+     class="fixed top-0 left-56 right-0 z-40 py-2 px-6
+            items-center justify-between text-sm font-medium
+            transition-all hidden">
+</div>
+
+<div class="max-w-6xl space-y-5 fade-in">
+
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Review & Edit</h1>
+      <p class="text-gray-500 text-sm mt-0.5">
+        Inspect PDFs · fix errors · approve for study
+      </p>
+    </div>
+    <button id="audit-btn" onclick="toggleAudit()"
+      class="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold
+             text-sm transition-all border-2 border-gray-300 text-gray-600
+             hover:border-blue-400">
+    </button>
+  </div>
+
+  <!-- Status filters -->
+  <div class="flex gap-2 flex-wrap">
+    {% for label, val in [('All',''),('Raw','raw'),
+       ('Edited','edited'),('Approved','approved'),('Loaded','loaded')] %}
+    <button onclick="filterStatus('{{val}}')" data-f="{{val}}"
+      class="px-4 py-1.5 rounded-full text-xs font-medium border
+             border-gray-200 text-gray-600 hover:border-blue-400
+             hover:text-blue-700 transition-all">
+      {{label}}
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- PDF table -->
+  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="bg-blue-950 text-white text-left text-xs uppercase">
+          <th class="px-4 py-3">PDF</th>
+          <th class="px-4 py-3">Subject</th>
+          <th class="px-4 py-3 text-center">Qs</th>
+          <th class="px-4 py-3 text-center">❌ Missing</th>
+          <th class="px-4 py-3 text-center">🩸 Bleeding</th>
+          <th class="px-4 py-3 text-center">Status</th>
+          <th class="px-4 py-3 text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="pdf-tbody" class="divide-y divide-gray-50">
+        <tr><td colspan="7"
+          class="px-4 py-10 text-center text-gray-400">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let auditOn  = false;
+let allPdfs  = [];
+let curFilter= '';
+
+const STATUS_CLS = {
+  raw     : 'bg-gray-100 text-gray-600',
+  edited  : 'bg-yellow-100 text-yellow-700',
+  approved: 'bg-green-100 text-green-700',
+  loaded  : 'bg-blue-100 text-blue-700',
+};
+
+async function init() {
+  await checkAudit();
+  await loadPdfs();
+}
+
+async function checkAudit() {
+  const r = await api('/api/audit/status');
+  auditOn = r.audit_mode;
+  renderAuditUI();
+}
+
+function renderAuditUI() {
+  const btn    = document.getElementById('audit-btn');
+  const banner = document.getElementById('audit-banner');
+  if(auditOn) {
+    btn.textContent = '🔓 Audit Mode ON — Click to Disable';
+    btn.className   = btn.className
+      .replace(/border-\S+/g,'border-orange-400')
+      .replace(/text-\S+/g, 'text-orange-700');
+    btn.style.background = '#fff7ed';
+    banner.classList.remove('hidden');
+    banner.style.display  = 'flex';
+    banner.className = banner.className.replace('hidden','');
+    banner.style.background = '#fff7ed';
+    banner.style.borderBottom = '1px solid #fed7aa';
+    banner.innerHTML =
+      `<span>🔓 <strong>Audit Mode Active</strong> — All editing enabled.</span>
+       <button onclick="toggleAudit()"
+         class="text-orange-600 hover:text-orange-800 underline text-sm">
+         Disable
+       </button>`;
+  } else {
+    btn.textContent = '🔒 Enable Audit Mode';
+    btn.className   = 'flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all border-2 border-gray-300 text-gray-600 hover:border-blue-400';
+    btn.style.background = '';
+    banner.style.display = 'none';
+  }
+}
+
+async function toggleAudit() {
+  const ep = auditOn ? '/api/audit/disable' : '/api/audit/enable';
+  const r  = await apiPost(ep);
+  auditOn  = r.audit_mode;
+  renderAuditUI();
+  toast(auditOn ? '🔓 Audit mode enabled' : '🔒 Audit mode disabled',
+        auditOn ? 'warn' : 'info');
+}
+
+async function loadPdfs() {
+  const d  = await api('/api/review/pdfs');
+  allPdfs  = d.pdfs||[];
+  renderTable(curFilter);
+}
+
+function filterStatus(status) {
+  curFilter = status;
+  document.querySelectorAll('[data-f]').forEach(b=>{
+    const active = b.dataset.f === status;
+    b.className = b.className
+      .replace('border-blue-500 bg-blue-50 text-blue-700',
+               'border-gray-200 text-gray-600')
+      .replace('border-gray-200 text-gray-600',
+               active?'border-blue-500 bg-blue-50 text-blue-700'
+                     :'border-gray-200 text-gray-600');
+  });
+  renderTable(status);
+}
+
+function renderTable(sf) {
+  const pdfs = sf ? allPdfs.filter(p=>p.status===sf) : allPdfs;
+  const tbody= document.getElementById('pdf-tbody');
+  if(!pdfs.length) {
+    tbody.innerHTML=`<tr><td colspan="7"
+      class="px-4 py-8 text-center text-gray-400">No PDFs found</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = pdfs.map(p=>{
+    const sc  = STATUS_CLS[p.status]||STATUS_CLS.raw;
+    const mis = (p.missing_ans||0)>0
+      ? `<span class="text-red-600 font-bold">${p.missing_ans}</span>`
+      : `<span class="text-green-600">0</span>`;
+    const bld = (p.bleed_count||0)>0
+      ? `<span class="text-orange-500 font-bold">${p.bleed_count}</span>`
+      : `<span class="text-green-600">0</span>`;
+    return `
+      <tr class="hover:bg-blue-50/30 transition-colors">
+        <td class="px-4 py-3">
+          <p class="font-medium text-gray-800 truncate max-w-xs">
+            ${p.filename||p.stem}
+          </p>
+          <p class="text-xs text-gray-400 mt-0.5 font-mono">${p.stem}</p>
+        </td>
+        <td class="px-4 py-3">
+          <span class="capitalize text-xs bg-blue-50 text-blue-700
+                       px-2 py-0.5 rounded-full">${p.subject||'?'}</span>
+        </td>
+        <td class="px-4 py-3 text-center font-medium">${p.total_q||0}</td>
+        <td class="px-4 py-3 text-center">${mis}</td>
+        <td class="px-4 py-3 text-center">${bld}</td>
+        <td class="px-4 py-3 text-center">
+          <span class="px-2.5 py-1 rounded-full text-xs font-medium ${sc}">
+            ${p.status||'raw'}
+          </span>
+        </td>
+        <td class="px-4 py-3 text-center">
+          <div class="flex gap-2 justify-center">
+            <a href="/review/${encodeURIComponent(p.stem)}"
+               class="px-3 py-1.5 rounded-lg bg-blue-700 text-white
+                      text-xs font-medium hover:bg-blue-600 transition-colors">
+              Review
+            </a>
+            ${p.status==='approved'?`
+              <button onclick="loadToDB('${p.stem}')"
+                class="px-3 py-1.5 rounded-lg bg-green-700 text-white
+                       text-xs font-medium hover:bg-green-600">
+                Load DB
+              </button>` :
+            p.status==='loaded'?
+              `<span class="text-green-600 text-xs font-medium">✓ loaded</span>`:
+              ''}
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+async function loadToDB(stem) {
+  if(!auditOn) { toast('Enable Audit Mode first','error'); return; }
+  if(!confirm(`Load "${stem}" to database?`)) return;
+  const r = await apiPost(`/api/loader/load/${encodeURIComponent(stem)}`);
+  if(r.ok) { toast(`✓ Loaded ${r.loaded} questions`,'success'); loadPdfs(); }
+  else toast('Error: '+(r.error||'unknown'),'error');
+}
+
+init();
+</script>
+{% endblock %}

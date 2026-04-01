@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}Question — P2E{% endblock %}
+{% block head %}
+<style>
+/* ── Two-column layout ─────────────────────────────────── */
+.q-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .q-layout { grid-template-columns: 1fr; }
+  .exp-col   { border-left: none !important; border-top: 2px solid #111; }
+}
+.q-col, .exp-col {
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(100vh - 195px);
+}
+.exp-col {
+  border-left: 2px solid #111;
+  background: #fffbf0;
+}
+
+/* Options */
+.opt-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  border: 2px solid #e5e7eb; background: #fff;
+  margin-bottom: 8px;
+}
+.opt-row.correct { border-color: var(--green); background: #f0fdf4; box-shadow: 2px 2px 0 var(--green); }
+.opt-circle {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 12px;
+  border: 2px solid #e5e7eb; flex-shrink: 0;
+  color: #6b7280; background: #f9fafb;
+}
+.opt-row.correct .opt-circle { background: var(--green); color: #fff; border-color: var(--green); }
+.opt-text { font-size: 14px; line-height: 1.5; padding-top: 2px; }
+
+/* Exp header */
+.exp-pill {
+  font-size: 11px; font-weight: 800; letter-spacing: 2px;
+  text-transform: uppercase; color: #92400e;
+  background: #fef3c7; padding: 3px 10px;
+  border-radius: 20px; border: 1.5px solid #fbbf24;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl space-y-4 fade-in">
+
+  <div class="flex items-center gap-3 flex-wrap">
+    <a href="/questions" class="text-sm text-blue-600 hover:underline">← Questions</a>
+    <span class="text-gray-300">|</span>
+    <span class="text-xs text-gray-400 font-mono" id="q-id-label">—</span>
+  </div>
+
+  <div class="neo-card overflow-hidden">
+
+    <!-- Header strip -->
+    <div id="q-header"
+         class="bg-gradient-to-r from-blue-900 to-blue-800 px-5 py-3
+                flex items-center gap-3 flex-wrap"
+         style="border-bottom:2px solid #1e3a5f">
+      <div class="text-gray-400 text-sm">Loading…</div>
+    </div>
+
+    <!-- Two columns -->
+    <div class="q-layout">
+
+      <!-- LEFT: question + options -->
+      <div class="q-col" id="q-col">
+        <div class="text-gray-400 text-sm text-center py-10">Loading…</div>
+      </div>
+
+      <!-- RIGHT: explanation -->
+      <div class="exp-col" id="exp-col">
+        <div class="flex items-center gap-2 mb-4 pb-3" style="border-bottom:2px solid #e5e7eb">
+          <span class="exp-pill">Explanation</span>
+          <span id="exp-mcq-id" class="text-xs text-gray-400 font-mono"></span>
+        </div>
+        <div id="exp-body">
+          <div class="text-gray-300 text-sm text-center py-10">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div id="q-footer"
+         class="px-5 py-3 bg-gray-50 flex flex-wrap gap-4 items-center text-xs text-gray-500"
+         style="border-top:2px solid #e5e7eb">
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const Q_ID = "{{ question_id }}";
+
+function getOpt(q, l) {
+  return (q.options && q.options[l]) || q['option_' + l.toLowerCase()] || '';
+}
+
+function renderQuestion(q) {
+  document.getElementById('q-id-label').textContent = q.question_id;
+
+  // ── Header ──────────────────────────────────────────────
+  const examTag = q.exam_type
+    ? `<span class="neo-badge" style="background:#7c3aed;color:#fff">${q.exam_type}</span>` : '';
+  document.getElementById('q-header').innerHTML = `
+    ${q.subject ? `<span class="neo-badge" style="background:#1e3a8a;color:#fff;text-transform:capitalize">${q.subject}</span>` : ''}
+    ${examTag}
+    ${q.topic   ? `<span class="text-blue-200 text-xs">📍 ${q.topic}</span>` : ''}
+    ${q.mcq_id  ? `<span class="text-blue-300 text-xs font-mono">🔷 ${q.mcq_id}</span>` : ''}
+    ${q.pearl_id && q.pearl_id !== q.mcq_id ? `<span class="text-blue-300 text-xs font-mono">${q.pearl_id}</span>` : ''}
+    <span class="text-blue-300 text-xs ml-auto">p.${q.page || '—'}</span>`;
+
+  // ── LEFT: question ────────────────────────────────────────
+  const opts = ['A','B','C','D'].filter(l => getOpt(q, l));
+  let left = '';
+
+  if (q.question_image) {
+    left += `<div class="mb-4">
+      <img src="/images/${q.question_image}" alt="Question"
+           class="w-full rounded-xl border-2 border-gray-200 cursor-zoom-in"
+           onclick="lightbox('/images/${q.question_image}')">
+    </div>`;
+  } else {
+    left += `<div class="q-content text-gray-800 leading-relaxed text-[15px] mb-4 font-medium">
+      ${q.question_html || q.question || '<span class="text-gray-300">(no stem)</span>'}
+    </div>`;
+  }
+
+  if (opts.length) {
+    left += opts.map(l => {
+      const correct = l === q.answer;
+      return `<div class="opt-row ${correct ? 'correct' : ''}">
+        <div class="opt-circle">${l}</div>
+        <div class="opt-text">${getOpt(q, l)}</div>
+        ${correct ? '<span class="ml-auto text-green-600 font-black text-xs shrink-0 pl-2">✓</span>' : ''}
+      </div>`;
+    }).join('');
+  } else if (!q.question_image) {
+    left += `<div class="text-xs text-amber-600 mt-2 bg-amber-50 p-3 rounded-xl border border-amber-200">
+      ⚠ Options not yet recorded — use splitter to add them
+    </div>`;
+  }
+
+  if (!opts.length && q.answer) {
+    left += `<div class="flex items-center gap-2 mt-3 px-4 py-2 bg-green-50 border-2 border-green-400 rounded-xl">
+      <span class="text-xs text-gray-500 font-medium">Correct answer:</span>
+      <span class="w-7 h-7 rounded-full bg-green-700 text-white flex items-center justify-center font-black text-sm">${q.answer}</span>
+    </div>`;
+  }
+
+  document.getElementById('q-col').innerHTML = left;
+
+  // ── RIGHT: explanation ──────────────────────────────────
+  document.getElementById('exp-mcq-id').textContent = q.mcq_id || '';
+
+  let right = '';
+  if (q.explanation_image) {
+    right = `<img src="/images/${q.explanation_image}" alt="Explanation"
+                  class="w-full rounded-xl border-2 border-amber-200 cursor-zoom-in"
+                  onclick="lightbox('/images/${q.explanation_image}')">`;
+  } else if (q.explanation) {
+    const imgs = (q.images || []).map(f =>
+      `<img src="/images/${f}" alt="" class="max-w-full rounded-xl my-2 border cursor-zoom-in"
+            onclick="lightbox('/images/${f}')">`).join('');
+    right = `<div class="text-sm text-gray-700 leading-relaxed q-content">
+      ${q.explanation_html || q.explanation}${imgs}
+    </div>`;
+  } else {
+    right = `<div class="text-gray-300 text-sm text-center py-10">
+      No explanation recorded yet
+    </div>`;
+  }
+  document.getElementById('exp-body').innerHTML = right;
+
+  // ── Footer ──────────────────────────────────────────────
+  const fsrs = q.fsrs || {};
+  const fsrsInfo = fsrs.reps !== undefined
+    ? `<span>📅 ${(fsrs.due||'—').slice(0,10)}</span>
+       <span>🔁 ${fsrs.reps||0} reps</span>
+       <span>💀 ${fsrs.lapses||0} lapses</span>
+       <span>📈 ${(fsrs.stability||0).toFixed(1)}d</span>` : '';
+  const tags = (q.topic_tags||[]).map(t =>
+    `<span class="bg-blue-50 text-blue-700 rounded-full px-2 py-0.5">${t}</span>`).join('');
+
+  document.getElementById('q-footer').innerHTML = `
+    ${fsrsInfo}${tags}
+    <a href="/review/question?pdf=${encodeURIComponent(q.pdf_stem||'')}&q=${encodeURIComponent(q.question_id)}"
+       class="ml-auto text-blue-500 hover:underline">✏️ Edit →</a>`;
+}
+
+function lightbox(src) {
+  const d = document.createElement('div');
+  d.className = 'fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4';
+  d.onclick = () => d.remove();
+  d.innerHTML = `<div class="relative max-w-5xl w-full" onclick="event.stopPropagation()">
+    <img src="${src}" class="max-w-full max-h-[92vh] object-contain rounded-xl mx-auto block"
+         style="image-rendering:crisp-edges">
+    <button onclick="this.closest('.fixed').remove()"
+            class="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-black
+                   font-black text-sm border-2 border-black flex items-center justify-center">✕</button>
+  </div>`;
+  document.body.appendChild(d);
+}
+
+api(`/api/questions/${encodeURIComponent(Q_ID)}`).then(q => {
+  if (!q || q.error) {
+    document.getElementById('q-col').innerHTML =
+      '<div class="text-red-500 text-sm text-center py-10">Question not found</div>';
+    return;
+  }
+  renderQuestion(q);
+});
+</script>
+{% endblock %}

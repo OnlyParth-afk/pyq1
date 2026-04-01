@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — P2E{% endblock %}
+{% block content %}
+<div class="max-w-5xl space-y-6 fade-in">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="text-3xl font-black text-[#111] tracking-tight">
+        Dashboard
+      </h1>
+      <p class="text-sm text-gray-500 font-medium mt-0.5"
+         id="dash-sub">Loading…</p>
+    </div>
+    <a href="/study" class="neo-btn neo-btn-primary text-base px-6 py-3">
+      Start Study →
+    </a>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="stat-cards">
+  </div>
+
+  <!-- Daily target + streak -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+    <div class="neo-card p-5">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-black text-[#111]">Daily Target</h3>
+        <span class="text-xs text-gray-400 font-semibold">
+          100 questions / day
+        </span>
+      </div>
+      <div class="neo-progress-track mb-2">
+        <div id="target-bar" class="neo-progress-fill"
+             style="width:0%;background:var(--yellow)"></div>
+      </div>
+      <p class="text-sm font-semibold text-gray-600">
+        <span id="target-done" class="font-black text-[#111]">0</span>
+        / 100 done today
+      </p>
+    </div>
+
+    <div class="neo-card p-5"
+         style="background:var(--yellow)">
+      <h3 class="font-black text-[#111] mb-2">Study Streak 🔥</h3>
+      <div class="flex items-end gap-2">
+        <span class="text-5xl font-black text-[#111]"
+              id="streak-num">0</span>
+        <span class="text-gray-700 mb-1 text-sm font-bold">days</span>
+      </div>
+      <p class="text-xs text-gray-700 font-semibold mt-1">
+        Keep it going!
+      </p>
+    </div>
+  </div>
+
+  <!-- Quick start -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+    <a href="/study?mode=exam"
+       class="neo-card p-5 flex items-center justify-between
+              hover:translate-x-[-2px] hover:translate-y-[-2px]
+              transition-transform"
+       style="background:#FFF0F0">
+      <div>
+        <p class="font-black text-[#111] text-base">📝 Exam Mode</p>
+        <p class="text-xs text-gray-500 font-semibold mt-0.5">
+          +4 / −1 · Timed · 1 min/Q
+        </p>
+      </div>
+      <span class="neo-badge"
+            style="background:var(--coral);color:#fff">
+        EXAM
+      </span>
+    </a>
+
+    <a href="/study?mode=practice"
+       class="neo-card p-5 flex items-center justify-between
+              hover:translate-x-[-2px] hover:translate-y-[-2px]
+              transition-transform"
+       style="background:#F0FFF4">
+      <div>
+        <p class="font-black text-[#111] text-base">🎯 Practice</p>
+        <p class="text-xs text-gray-500 font-semibold mt-0.5">
+          Instant feedback · FSRS
+        </p>
+      </div>
+      <span class="neo-badge"
+            style="background:var(--green);color:#fff">
+        FSRS
+      </span>
+    </a>
+
+    <a href="/study?mode=custom"
+       class="neo-card p-5 flex items-center justify-between
+              hover:translate-x-[-2px] hover:translate-y-[-2px]
+              transition-transform"
+       style="background:#F5F0FF">
+      <div>
+        <p class="font-black text-[#111] text-base">⚙️ Custom</p>
+        <p class="text-xs text-gray-500 font-semibold mt-0.5">
+          Your rules · Your topics
+        </p>
+      </div>
+      <span class="neo-badge"
+            style="background:var(--purple);color:#fff">
+        CUSTOM
+      </span>
+    </a>
+  </div>
+
+  <!-- Activity chart -->
+  <div class="neo-card p-5">
+    <h3 class="section-title mb-4">Activity — Last 14 Days</h3>
+    <canvas id="actChart" height="80"></canvas>
+  </div>
+
+  <!-- Subject accuracy -->
+  <div class="neo-card p-5">
+    <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+      <h3 class="section-title">Subject Accuracy</h3>
+      <a href="/analytics"
+         class="neo-btn neo-btn-white text-xs px-3 py-1.5">
+        Full analytics →
+      </a>
+    </div>
+    <div id="subj-bars" class="space-y-3"></div>
+  </div>
+
+  <!-- Recent sessions -->
+  <div class="neo-card overflow-hidden">
+    <div class="px-6 py-4 flex justify-between items-center"
+         style="border-bottom:2px solid #111;background:var(--black)">
+      <h3 class="font-black text-white">Recent Sessions</h3>
+      <a href="/study"
+         class="neo-btn neo-btn-yellow text-xs px-3 py-1.5">
+        New session →
+      </a>
+    </div>
+    <div id="recent-sess" class="divide-y-2 divide-[#111] text-sm">
+      <div class="px-6 py-4 text-gray-400 font-medium">Loading…</div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SUBJ_COL = {
+  anatomy      :'#92400e', physiology  :'#1e3a5f',
+  biochemistry :'#064e3b', pathology   :'#7f1d1d',
+  pharmacology :'#4c1d95', microbiology:'#134e4a',
+  medicine     :'#1e293b', surgery     :'#0f172a',
+  psm          :'#164e63', ophthalmology:'#312e81',
+  ent          :'#3b0764', pediatrics  :'#065f46',
+  orthopedics  :'#7c2d12', radiology   :'#111827',
+  dermatology  :'#831843', psychiatry  :'#4a1d96',
+  anaesthesia  :'#134e4a', obgyn       :'#881337',
+  forensic     :'#27272a',
+};
+
+const STAT_ICONS = ['📖','🎯','📅','🏆'];
+const STAT_BKGS  = [
+  'var(--yellow)',
+  'var(--green)',
+  '#E0F2FE',
+  'var(--purple)',
+];
+const STAT_TC = ['#111','#fff','#111','#fff'];
+
+async function loadDashboard() {
+  const [ov, subj, qstat, sess] = await Promise.all([
+    api('/api/analytics/overview'),
+    api('/api/analytics/subject-accuracy'),
+    api('/api/stats'),
+    api('/api/study/sessions?limit=6'),
+  ]);
+
+  const s = ov.stats||{};
+  document.getElementById('dash-sub').textContent =
+    `${(qstat.total_questions||0).toLocaleString()} questions · `+
+    `${s.total_reviews||0} reviews done`;
+
+  // Stat cards
+  const cards = [
+    {icon:'📖', label:'Total Reviews', val:s.total_reviews||0},
+    {icon:'🎯', label:'Accuracy',      val:(s.overall_accuracy||0)+'%'},
+    {icon:'📅', label:'Due Today',     val:s.due_today||0},
+    {icon:'🏆', label:'Sessions',      val:s.total_sessions||0},
+  ];
+  document.getElementById('stat-cards').innerHTML = cards.map((c,i)=>`
+    <div class="neo-card p-5 text-center"
+         style="background:${STAT_BKGS[i]}">
+      <div class="text-4xl mb-2">${c.icon}</div>
+      <div class="text-3xl font-black"
+           style="color:${STAT_TC[i]}">${c.val}</div>
+      <div class="text-xs font-bold mt-1 opacity-70"
+           style="color:${STAT_TC[i]}">${c.label}</div>
+    </div>`).join('');
+
+  // Target bar
+  const today = s.today_count||0;
+  const pct   = Math.min(100,Math.round(today/100*100));
+  document.getElementById('target-bar').style.width = pct+'%';
+  document.getElementById('target-done').textContent = today;
+  document.getElementById('streak-num').textContent  = s.streak||0;
+
+  // Activity chart
+  const daily = [...(ov.daily||[])].reverse().slice(0,14);
+  new Chart(document.getElementById('actChart'),{
+    type:'bar',
+    data:{
+      labels  : daily.map(d=>d.date?.slice(5)||''),
+      datasets:[
+        { label:'Done',
+          data:daily.map(d=>d.questions_done||0),
+          backgroundColor:'#111',
+          borderRadius:4 },
+        { label:'Correct',
+          data:daily.map(d=>d.correct||0),
+          backgroundColor:'var(--yellow)',
+          borderRadius:4 },
+      ],
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{grid:{display:false},
+           ticks:{font:{weight:'700',size:11}}},
+        y:{grid:{color:'#e5e7eb'},
+           beginAtZero:true,
+           ticks:{font:{weight:'700'}}},
+      },
+    },
+  });
+
+  // Subject bars
+  const subjList = subj.subjects||[];
+  document.getElementById('subj-bars').innerHTML =
+    subjList.map(s=>{
+      const col = SUBJ_COL[s.subject]||'#6b7280';
+      const acc = s.accuracy||0;
+      const barCol = acc>=70?'var(--green)':
+                     acc>=50?'var(--yellow)':'var(--coral)';
+      return `
+        <div class="flex items-center gap-3">
+          <span class="text-xs w-24 text-right font-bold
+                       capitalize text-gray-700 shrink-0">
+            ${s.subject}
+          </span>
+          <div class="flex-1 neo-progress-track" style="height:10px">
+            <div class="neo-progress-fill"
+                 style="width:${acc}%;background:${barCol}"></div>
+          </div>
+          <span class="text-xs font-black text-[#111]
+                       w-10 text-right shrink-0">${acc}%</span>
+        </div>`;
+    }).join('') ||
+    '<p class="text-sm text-gray-400 font-medium">No data yet</p>';
+
+  // Recent sessions
+  const rows = sess.sessions||[];
+  const el   = document.getElementById('recent-sess');
+  if(!rows.length){
+    el.innerHTML='<div class="px-6 py-4 text-gray-400 font-medium">No sessions yet</div>';
+    return;
+  }
+  const MC={
+    exam    :['var(--coral)','#fff'],
+    practice:['var(--green)','#fff'],
+    custom  :['var(--purple)','#fff'],
+  };
+  el.innerHTML = rows.map(r=>{
+    const tot  = r.total_questions||1;
+    const pct  = Math.round((r.correct||0)/tot*100);
+    const dur  = r.duration_sec
+      ? `${Math.floor(r.duration_sec/60)}m ${r.duration_sec%60}s`:'—';
+    const [bg,tc] = MC[r.mode]||['#e5e7eb','#111'];
+    const accCol  = pct>=70?'var(--green)':
+                    pct>=50?'#F59E0B':'var(--coral)';
+    return `
+      <div class="px-6 py-3.5 flex items-center gap-4
+                  hover:bg-gray-50 transition-colors">
+        <span class="neo-badge shrink-0"
+              style="background:${bg};color:${tc}">
+          ${(r.mode||'').toUpperCase()}
+        </span>
+        <span class="flex-1 font-semibold text-gray-700">
+          ${r.correct||0}/${tot} correct
+        </span>
+        <span class="font-black" style="color:${accCol}">${pct}%</span>
+        <span class="text-gray-400 text-xs font-medium">${dur}</span>
+      </div>`;
+  }).join('');
+}
+
+loadDashboard();
+</script>
+{% endblock %}

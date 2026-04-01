@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Study — P2E{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6 fade-in">
+
+  <h1 class="text-2xl font-bold text-gray-900">Start a Session</h1>
+
+  <!-- Mode selector -->
+  <div class="grid grid-cols-3 gap-3">
+    <button onclick="selectMode('exam')" id="mode-exam"
+            class="neo-card p-4 text-left border-gray-200 bg-white">
+      <div class="text-2xl mb-1">📝</div>
+      <div class="font-bold text-gray-800">Exam</div>
+      <div class="text-xs text-gray-400 mt-0.5">+4/−1 · Timed</div>
+    </button>
+    <button onclick="selectMode('practice')" id="mode-practice"
+            class="neo-card p-4 text-left border-gray-200 bg-white">
+      <div class="text-2xl mb-1">🎯</div>
+      <div class="font-bold text-gray-800">Practice</div>
+      <div class="text-xs text-gray-400 mt-0.5">Instant feedback</div>
+    </button>
+    <button onclick="selectMode('custom')" id="mode-custom"
+            class="neo-card p-4 text-left border-gray-200 bg-white">
+      <div class="text-2xl mb-1">⚙️</div>
+      <div class="font-bold text-gray-800">Custom</div>
+      <div class="text-xs text-gray-400 mt-0.5">Your rules</div>
+    </button>
+  </div>
+
+  <!-- Config -->
+  <div class="neo-card p-6 space-y-4">
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="text-xs font-bold text-gray-600 block mb-1.5 uppercase tracking-wide">
+          Subject
+        </label>
+        <select id="cfg-subject" class="neo-select w-full">
+          <option value="">All Subjects</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-gray-600 block mb-1.5 uppercase tracking-wide">
+          Exam Type
+        </label>
+        <select id="cfg-exam" class="neo-select w-full">
+          <option value="">All Exams</option>
+          <option value="NEET PG">NEET PG</option>
+          <option value="INICET">INICET</option>
+          <option value="FMGE">FMGE</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="text-xs font-bold text-gray-600 block mb-1.5 uppercase tracking-wide">
+        Questions
+      </label>
+      <select id="cfg-count" class="neo-select w-full">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="40">40</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+
+    <!-- Custom options -->
+    <div id="custom-opts" class="hidden space-y-3 pt-1">
+      <div style="border-top:2px solid #e5e7eb;padding-top:12px">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer font-medium">
+            <input type="checkbox" id="opt-fsrs"  class="rounded accent-blue-600"> FSRS due only
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer font-medium">
+            <input type="checkbox" id="opt-wrong" class="rounded accent-blue-600"> Wrong only
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer font-medium">
+            <input type="checkbox" id="opt-weak"  class="rounded accent-blue-600"> Weak topics
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Due count -->
+    <div class="neo-card-flat px-4 py-3 flex justify-between items-center"
+         style="background:#eff6ff;border-color:#bfdbfe">
+      <span class="text-sm text-blue-700 font-semibold">📅 FSRS due now</span>
+      <span class="font-black text-blue-800" id="due-count">—</span>
+    </div>
+
+    <button onclick="startSession()" id="start-btn"
+            class="neo-btn neo-btn-primary w-full py-3.5 text-base justify-center">
+      Start Session →
+    </button>
+  </div>
+
+  <!-- Recent sessions -->
+  <div class="neo-card overflow-hidden">
+    <div class="px-5 py-4 flex items-center justify-between"
+         style="border-bottom:2px solid #111;background:#0f172a">
+      <h3 class="font-black text-white">Recent Sessions</h3>
+    </div>
+    <div id="sess-list" class="divide-y-2 divide-[#f3f4f6] text-sm">
+      <div class="px-5 py-4 text-gray-400">Loading…</div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedMode = new URLSearchParams(location.search).get('mode') || 'practice';
+
+const MODE_STYLE = {
+  exam    : { border: 'var(--coral)',  bg: '#fff0f0' },
+  practice: { border: 'var(--green)',  bg: '#f0fff4' },
+  custom  : { border: 'var(--purple)', bg: '#f5f0ff' },
+};
+
+function selectMode(m) {
+  selectedMode = m;
+  ['exam','practice','custom'].forEach(mode => {
+    const btn = document.getElementById('mode-'+mode);
+    if (mode === m) {
+      btn.style.borderColor = MODE_STYLE[m].border;
+      btn.style.background  = MODE_STYLE[m].bg;
+      btn.style.boxShadow   = `3px 3px 0 ${MODE_STYLE[m].border}`;
+    } else {
+      btn.style.borderColor = '#e5e7eb';
+      btn.style.background  = '#fff';
+      btn.style.boxShadow   = '4px 4px 0px #111';
+    }
+  });
+  document.getElementById('custom-opts').classList.toggle('hidden', m !== 'custom');
+}
+
+async function init() {
+  selectMode(selectedMode);
+
+  const [subs, due] = await Promise.all([
+    api('/api/subjects'),
+    api('/api/fsrs/due?limit=500'),
+  ]);
+
+  const sel = document.getElementById('cfg-subject');
+  (subs||[]).forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.subject;
+    o.textContent = s.subject[0].toUpperCase() + s.subject.slice(1);
+    sel.appendChild(o);
+  });
+
+  document.getElementById('due-count').textContent = due.count || 0;
+
+  // Recent sessions
+  const sess = await api('/api/study/sessions?limit=6');
+  const el   = document.getElementById('sess-list');
+  const rows = (sess && sess.sessions) || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="px-5 py-4 text-gray-400">No sessions yet — start one above!</div>';
+    return;
+  }
+  const MC = {
+    exam    : ['var(--coral)',  '#fff'],
+    practice: ['var(--green)',  '#fff'],
+    custom  : ['var(--purple)', '#fff'],
+  };
+  el.innerHTML = rows.map(r => {
+    const tot = r.total_questions || 1;
+    const pct = Math.round((r.correct||0) / tot * 100);
+    const dur = r.duration_sec ? `${Math.floor(r.duration_sec/60)}m ${r.duration_sec%60}s` : '—';
+    const [bg, tc] = MC[r.mode] || ['#e5e7eb','#111'];
+    const col = pct >= 70 ? 'text-green-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
+    return `<div class="px-5 py-3 flex items-center gap-4">
+      <span class="neo-badge shrink-0" style="background:${bg};color:${tc}">${(r.mode||'').toUpperCase()}</span>
+      <span class="flex-1 text-gray-700 font-medium">${r.correct||0}/${tot}</span>
+      <span class="font-black ${col}">${pct}%</span>
+      <span class="text-gray-400 text-xs">${dur}</span>
+    </div>`;
+  }).join('');
+}
+
+async function startSession() {
+  const btn = document.getElementById('start-btn');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  try {
+    const body = {
+      mode       : selectedMode,
+      subject    : document.getElementById('cfg-subject').value,
+      exam_type  : document.getElementById('cfg-exam').value,
+      count      : parseInt(document.getElementById('cfg-count').value),
+      fsrs_due   : document.getElementById('opt-fsrs')?.checked  || false,
+      wrong_only : document.getElementById('opt-wrong')?.checked || false,
+      weak_topics: document.getElementById('opt-weak')?.checked  || false,
+    };
+    const r = await apiPost('/api/study/session/start', body);
+    if (r.error) { toast(r.error, 'error'); return; }
+    const qids = r.question_ids.join(',');
+    location.href = `/session?sid=${r.session_id}&mode=${selectedMode}&qids=${qids}`;
+  } catch(e) {
+    toast('Failed to start session', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Start Session →';
+  }
+}
+
+init();
+</script>
+{% endblock %}

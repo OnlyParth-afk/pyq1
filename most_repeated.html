@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% block title %}Most Repeated Topics — P2E{% endblock %}
+{% block head %}
+<style>
+/* ── Subject section ─────────────────────────────────── */
+.subj-section { margin-bottom: 32px; }
+
+.subj-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px;
+  border: 2px solid #111;
+  border-radius: 12px 12px 0 0;
+  border-bottom: none;
+  font-weight: 900;
+  font-size: 15px;
+  color: #fff;
+}
+
+.subj-body {
+  border: 2px solid #111;
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* ── Topic rows ──────────────────────────────────────── */
+.topic-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1.5px solid #f3f4f6;
+  transition: background .1s;
+}
+.topic-row:last-child { border-bottom: none; }
+.topic-row:hover { background: #f8faff; }
+
+.rank-num {
+  font-size: 11px; font-weight: 900; color: #9ca3af;
+  min-width: 22px; text-align: right;
+}
+.rank-num.top { color: #111; }
+
+.freq-bar-wrap {
+  flex: 1; height: 8px;
+  background: #f3f4f6;
+  border-radius: 4px; overflow: hidden;
+  border: 1px solid #e5e7eb;
+  min-width: 60px;
+}
+.freq-bar { height: 100%; border-radius: 4px; transition: width .4s; }
+
+.freq-count {
+  font-size: 13px; font-weight: 900;
+  min-width: 28px; text-align: right;
+}
+
+.topic-name {
+  flex: 2; font-size: 13px; color: #1f2937;
+  line-height: 1.3; min-width: 0;
+}
+
+.exam-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+.exam-tag {
+  font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px;
+  border: 1.5px solid #111; box-shadow: 1px 1px 0 #111;
+}
+
+/* ── Filters ─────────────────────────────────────────── */
+.filter-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* ── Overview cards ──────────────────────────────────── */
+.ov-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.ov-card {
+  background: #fff;
+  border: 2px solid #111;
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 #111;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: transform .1s, box-shadow .1s;
+}
+.ov-card:hover {
+  transform: translate(-1px,-1px);
+  box-shadow: 4px 4px 0 #111;
+}
+.ov-card.active { outline: 3px solid var(--blue); }
+
+.ov-subj {
+  font-size: 13px; font-weight: 900;
+  text-transform: capitalize; margin-bottom: 6px;
+}
+.ov-stat { font-size: 11px; color: #6b7280; font-weight: 600; }
+.ov-max  { font-size: 20px; font-weight: 900; color: var(--blue); margin: 2px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl space-y-5 fade-in">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-black text-[#111]">🔁 Most Repeated Topics</h1>
+      <p class="text-sm text-gray-500 mt-0.5" id="page-sub">
+        Loading…
+      </p>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="neo-card-flat p-4 filter-row">
+    <select id="f-subject" class="neo-select" style="min-width:160px">
+      <option value="">All Subjects</option>
+    </select>
+    <select id="f-min" class="neo-select">
+      <option value="2">≥ 2 times</option>
+      <option value="3" selected>≥ 3 times</option>
+      <option value="5">≥ 5 times</option>
+      <option value="1">All topics</option>
+    </select>
+    <select id="f-sort" class="neo-select">
+      <option value="freq">Most repeated first</option>
+      <option value="alpha">Alphabetical</option>
+    </select>
+    <input id="f-search" type="text" placeholder="🔍 Search topic…"
+           class="neo-input" style="flex:1;min-width:160px">
+    <span class="text-xs text-gray-400 font-semibold" id="result-count"></span>
+  </div>
+
+  <!-- Overview cards -->
+  <div class="ov-grid" id="ov-grid"></div>
+
+  <!-- Topic lists by subject -->
+  <div id="topic-sections"></div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allData   = [];
+let summaryData = [];
+let selSubject= '';
+let searchQ   = '';
+let minCount  = 3;
+let sortMode  = 'freq';
+let searchTimer = null;
+
+const SUBJ_BG = {
+  anatomy:'#92400e',physiology:'#1e3a5f',biochemistry:'#064e3b',
+  pathology:'#7f1d1d',pharmacology:'#4c1d95',microbiology:'#134e4a',
+  medicine:'#1e293b',surgery:'#0f172a',psm:'#164e63',
+  ophthalmology:'#312e81',ent:'#3b0764',pediatrics:'#065f46',
+  orthopedics:'#7c2d12',radiology:'#111827',dermatology:'#831843',
+  psychiatry:'#4a1d96',anaesthesia:'#134e4a',obgyn:'#881337',
+  forensic:'#27272a',
+};
+
+const EXAM_COL = {
+  'NEET PG' : ['#ede9fe','#6d28d9'],
+  'INICET'  : ['#fef3c7','#b45309'],
+  'FMGE'    : ['#dbeafe','#1d4ed8'],
+};
+
+async function loadData() {
+  const d = await api('/api/analytics/most-repeated?min_count=1&limit=100');
+  allData     = d.subjects  || [];
+  summaryData = d.summary   || [];
+
+  // Populate subject filter
+  const sel = document.getElementById('f-subject');
+  allData.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.subject;
+    o.textContent = cap(s.subject);
+    sel.appendChild(o);
+  });
+
+  renderOverview();
+  render();
+}
+
+function cap(s) {
+  return (s||'').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function renderOverview() {
+  const grid = document.getElementById('ov-grid');
+  grid.innerHTML = summaryData.map(s => `
+    <div class="ov-card ${selSubject===s.subject?'active':''}"
+         onclick="quickFilter('${s.subject}')">
+      <div class="ov-subj" style="color:${SUBJ_BG[s.subject]||'#111'}">${cap(s.subject)}</div>
+      <div class="ov-max">${s.max_repeat}×</div>
+      <div class="ov-stat">${s.unique_topics} topics · ${s.total_questions} Qs</div>
+    </div>`).join('');
+}
+
+function quickFilter(subj) {
+  selSubject = selSubject === subj ? '' : subj;
+  document.getElementById('f-subject').value = selSubject;
+  renderOverview();
+  render();
+}
+
+function render() {
+  let subjects = allData;
+
+  // Subject filter
+  if (selSubject) subjects = subjects.filter(s => s.subject === selSubject);
+
+  // Min count filter + search filter per topic
+  let totalTopics = 0;
+  const sections  = [];
+
+  subjects.forEach(s => {
+    let topics = s.topics.filter(t => t.frequency >= minCount);
+    if (searchQ) {
+      topics = topics.filter(t =>
+        t.topic.toLowerCase().includes(searchQ.toLowerCase())
+      );
+    }
+    if (!topics.length) return;
+
+    // Sort
+    if (sortMode === 'alpha') topics = [...topics].sort((a,b) => a.topic.localeCompare(b.topic));
+    else topics = [...topics].sort((a,b) => b.frequency - a.frequency);
+
+    totalTopics += topics.length;
+    sections.push({ subject: s.subject, topics });
+  });
+
+  document.getElementById('result-count').textContent =
+    `${totalTopics} topic${totalTopics!==1?'s':''}`;
+
+  document.getElementById('page-sub').textContent =
+    `${totalTopics} high-yield topics across ${sections.length} subjects`;
+
+  if (!sections.length) {
+    document.getElementById('topic-sections').innerHTML =
+      '<div class="neo-card-flat p-8 text-center text-gray-400">No topics match — try lowering the min count filter</div>';
+    return;
+  }
+
+  const maxFreq = Math.max(...sections.flatMap(s => s.topics.map(t => t.frequency)), 1);
+  const bg = SUBJ_BG;
+
+  document.getElementById('topic-sections').innerHTML = sections.map(s => {
+    const color = bg[s.subject] || '#374151';
+    const rows  = s.topics.map((t, i) => {
+      const pct   = Math.round(t.frequency / maxFreq * 100);
+      const isTop = i < 3;
+      // Bar color: green if >5, yellow if 3-5, red if <3
+      const barCol = t.frequency >= 6 ? '#00C853'
+                   : t.frequency >= 3 ? '#FFE500'
+                   : '#FF6B6B';
+      const examHtml = t.exams
+        .filter(Boolean)
+        .map(e => {
+          const [ebg, etc] = EXAM_COL[e] || ['#f3f4f6','#374151'];
+          return `<span class="exam-tag" style="background:${ebg};color:${etc}">${e}</span>`;
+        }).join('');
+
+      return `<div class="topic-row">
+        <span class="rank-num ${isTop?'top':''}">${i+1}</span>
+        <div class="topic-name">${t.topic}</div>
+        <div class="freq-bar-wrap">
+          <div class="freq-bar" style="width:${pct}%;background:${barCol}"></div>
+        </div>
+        <span class="freq-count" style="color:${t.frequency>=6?'#00a844':t.frequency>=3?'#b45309':'#dc2626'}">${t.frequency}×</span>
+        <div class="exam-tags">${examHtml}</div>
+        <a href="/study?mode=practice&subject=${encodeURIComponent(s.subject)}"
+           class="text-xs text-blue-500 hover:underline ml-1 shrink-0">Study →</a>
+      </div>`;
+    }).join('');
+
+    return `<div class="subj-section">
+      <div class="subj-header" style="background:${color}">
+        <span>${cap(s.subject)}</span>
+        <span class="ml-auto text-xs font-semibold opacity-70">${s.topics.length} topics</span>
+      </div>
+      <div class="subj-body">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Events ────────────────────────────────────────────
+document.getElementById('f-subject').addEventListener('change', e => {
+  selSubject = e.target.value;
+  renderOverview();
+  render();
+});
+document.getElementById('f-min').addEventListener('change', e => {
+  minCount = parseInt(e.target.value);
+  render();
+});
+document.getElementById('f-sort').addEventListener('change', e => {
+  sortMode = e.target.value;
+  render();
+});
+document.getElementById('f-search').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    searchQ = e.target.value.trim();
+    render();
+  }, 300);
+});
+
+loadData();
+</script>
+{% endblock %}
