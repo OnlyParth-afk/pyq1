@@ -1,13 +1,424 @@
-<html>
-<head>
-    <title>Session</title>
-    <link rel="stylesheet" type="text/css" href="styles.css">
-</head>
-<body>
-    <div class="image-container">
-        <img src="image.jpg" alt="Image Description" class="lightbox" />
-        <p>Some text explaining the image.</p>
+{% extends "base.html" %}
+{% block title %}Session — P2E{% endblock %}
+{% block head %}
+<style>
+/* ── Two-column layout ──────────────────────────────── */
+.sess-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .sess-layout { grid-template-columns: 1fr; }
+  .sess-exp    { border-left: none !important; border-top: 2px solid #111; }
+}
+.sess-q, .sess-exp {
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(100vh - 235px);
+}
+.sess-exp {
+  border-left: 2px solid #111;
+  background: #fffbf0;
+  display: none;
+  flex-direction: column;
+}
+
+/* Options */
+.opt-btn {
+  width: 100%; display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px; border-radius: 10px;
+  border: 2px solid #e5e7eb; background: #fff;
+  cursor: pointer; text-align: left; font-family: inherit;
+  font-size: 14px; line-height: 1.4; transition: all .1s;
+  margin-bottom: 8px;
+}
+.opt-btn:hover:not(:disabled) {
+  border-color: var(--blue);
+  box-shadow: 2px 2px 0 var(--blue);
+  transform: translate(-1px,-1px);
+}
+.opt-btn:disabled { cursor: not-allowed; }
+.opt-btn.correct  { border-color: var(--green); background: #f0fdf4; box-shadow: 2px 2px 0 var(--green); }
+.opt-btn.wrong    { border-color: var(--coral);  background: #fff5f5; }
+.opt-circle {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 12px;
+  border: 2px solid #e5e7eb; flex-shrink: 0;
+  color: #6b7280; background: #f9fafb;
+}
+.opt-btn.correct .opt-circle { background: var(--green); color: #fff; border-color: var(--green); }
+.opt-btn.wrong   .opt-circle { background: var(--coral);  color: #fff; border-color: var(--coral);  }
+
+/* Exp header */
+.exp-pill {
+  font-size: 11px; font-weight: 800; letter-spacing: 2px;
+  text-transform: uppercase; color: #92400e;
+  background: #fef3c7; padding: 3px 10px;
+  border-radius: 20px; border: 1.5px solid #fbbf24;
+}
+
+/* Progress */
+.prog-track { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; border: 1.5px solid #111; }
+.prog-fill  { height: 100%; background: var(--yellow); border-radius: 3px; transition: width .3s; }
+
+/* Confidence */
+.conf-btn {
+  flex: 1; padding: 9px 4px; border-radius: 8px; border: 2px solid #111;
+  font-weight: 800; font-size: 11px; cursor: pointer;
+  font-family: inherit; letter-spacing: .5px; transition: all .1s;
+}
+.conf-btn:hover { transform: translate(-1px,-1px); box-shadow: 2px 2px 0 #111; }
+
+.timer-warn { color: var(--coral) !important; animation: blink 1s infinite; }
+@keyframes blink { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl space-y-3 fade-in">
+
+  <!-- Session bar -->
+  <div class="neo-card-flat px-5 py-3 flex items-center gap-4 flex-wrap">
+    <span class="neo-badge" id="mode-badge">—</span>
+    <div class="flex-1 prog-track min-w-32">
+      <div class="prog-fill" id="prog-fill" style="width:0%"></div>
     </div>
-    <script src="lightbox.js"></script>
-</body>
-</html>
+    <span class="text-sm font-bold" id="prog-label">0 / 0</span>
+    <span class="font-mono font-bold text-lg" id="timer" style="min-width:52px">0:00</span>
+    <button onclick="endSession()" class="neo-btn neo-btn-white text-xs px-3 py-2">✕ End</button>
+  </div>
+
+  <!-- Question card -->
+  <div class="neo-card overflow-hidden" id="q-card" style="display:none">
+
+    <!-- Card header -->
+    <div id="card-header"
+         class="bg-gradient-to-r from-blue-900 to-blue-800 px-5 py-3
+                flex items-center gap-3 flex-wrap"
+         style="border-bottom:2px solid #1e3a5f">
+    </div>
+
+    <!-- Two columns -->
+    <div class="sess-layout">
+
+      <!-- LEFT: question + options -->
+      <div class="sess-q" id="sess-q">
+        <div class="text-gray-400 text-sm text-center py-10">Loading…</div>
+      </div>
+
+      <!-- RIGHT: explanation (hidden until answered) -->
+      <div class="sess-exp" id="sess-exp">
+        <div class="flex items-center gap-2 mb-4 pb-3" style="border-bottom:2px solid #e5e7eb">
+          <span class="exp-pill">Explanation</span>
+          <span id="exp-mcq-id" class="text-xs font-mono text-gray-400"></span>
+        </div>
+        <div id="exp-body"></div>
+      </div>
+    </div>
+
+    <!-- Action bar (after answer) -->
+    <div id="action-bar"
+         class="px-5 py-4 bg-gray-50 flex flex-wrap gap-3 items-center"
+         style="border-top:2px solid #111;display:none">
+      <!-- FSRS confidence (practice/custom) -->
+      <div id="conf-row" class="flex gap-2 flex-1 min-w-60" style="display:none">
+        <button class="conf-btn" style="background:#fee2e2" onclick="rate(1)">😣 Again</button>
+        <button class="conf-btn" style="background:#fef3c7" onclick="rate(2)">😐 Hard</button>
+        <button class="conf-btn" style="background:#d1fae5" onclick="rate(3)">🙂 Good</button>
+        <button class="conf-btn" style="background:#dbeafe" onclick="rate(4)">😎 Easy</button>
+      </div>
+      <button onclick="nextQuestion()" class="neo-btn neo-btn-primary px-6 py-2.5">Next →</button>
+    </div>
+
+  </div>
+
+  <!-- Loading -->
+  <div id="loading-card" class="neo-card p-10 text-center text-gray-400 text-sm">
+    Loading session…
+  </div>
+
+  <!-- Done -->
+  <div id="done-card" class="neo-card p-8 text-center space-y-5" style="display:none">
+    <div class="text-5xl">🎉</div>
+    <h2 class="text-2xl font-black">Session Complete!</h2>
+    <div class="grid grid-cols-3 gap-4 max-w-sm mx-auto" id="done-stats"></div>
+    <div class="flex gap-3 justify-center flex-wrap">
+      <a href="/study"     class="neo-btn neo-btn-primary">New Session →</a>
+      <a href="/analytics" class="neo-btn neo-btn-white">Analytics →</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SP         = new URLSearchParams(location.search);
+const SESSION_ID = SP.get('sid');
+const MODE       = SP.get('mode') || 'practice';
+const Q_IDS      = (SP.get('qids') || '').split(',').filter(Boolean);
+
+let curIdx    = 0;
+let questions = [];
+let answered  = false;
+let elapsed   = 0;
+let qElapsed  = 0;
+let timerInt  = null;
+let qTimerInt = null;
+const PER_Q   = 60; // seconds for exam mode
+const stats   = { correct: 0, incorrect: 0, skipped: 0 };
+
+const MODE_STYLE = {
+  exam    : ['var(--coral)',  '#fff'],
+  practice: ['var(--green)',  '#fff'],
+  custom  : ['var(--purple)', '#fff'],
+};
+
+function getOpt(q, l) {
+  return (q.options && q.options[l]) || q['option_' + l.toLowerCase()] || '';
+}
+
+// ── Init ───────────────────────────────────────────────
+async function init() {
+  const [bg, tc] = MODE_STYLE[MODE] || ['#e5e7eb', '#111'];
+  const mb = document.getElementById('mode-badge');
+  mb.style.background = bg; mb.style.color = tc;
+  mb.textContent = MODE.toUpperCase();
+
+  // Global session timer
+  timerInt = setInterval(() => {
+    elapsed++;
+    if (MODE !== 'exam') {
+      document.getElementById('timer').textContent =
+        `${Math.floor(elapsed/60)}:${String(elapsed%60).padStart(2,'0')}`;
+    }
+  }, 1000);
+
+  if (!Q_IDS.length) { showDone(); return; }
+
+  questions = (await Promise.all(
+    Q_IDS.map(id => api(`/api/questions/${encodeURIComponent(id)}`))
+  )).filter(Boolean);
+
+  document.getElementById('loading-card').style.display = 'none';
+  document.getElementById('q-card').style.display = 'block';
+  showQuestion(0);
+}
+
+// ── Show question ──────────────────────────────────────
+function showQuestion(idx) {
+  const q = questions[idx];
+  if (!q) { showDone(); return; }
+  answered = false;
+  curIdx   = idx;
+
+  // Progress
+  const pct = Math.round(idx / questions.length * 100);
+  document.getElementById('prog-fill').style.width  = pct + '%';
+  document.getElementById('prog-label').textContent = `${idx+1} / ${questions.length}`;
+
+  // Header
+  const examTag = q.exam_type
+    ? `<span class="neo-badge" style="background:#7c3aed;color:#fff;font-size:10px">${q.exam_type}</span>` : '';
+  document.getElementById('card-header').innerHTML = `
+    ${q.subject ? `<span class="neo-badge" style="background:#1e3a8a;color:#fff;text-transform:capitalize;font-size:10px">${q.subject}</span>` : ''}
+    ${examTag}
+    ${q.topic ? `<span class="text-blue-200 text-xs">📍 ${q.topic}</span>` : ''}
+    <span class="text-blue-300 text-xs ml-auto font-mono">Q${idx+1}</span>`;
+
+  // LEFT: question
+  const opts = ['A','B','C','D'].filter(l => getOpt(q, l));
+  let left = '';
+
+  if (q.question_image) {
+    left += `<div class="mb-4">
+      <img src="/images/${q.question_image}" alt="Question"
+           class="w-full rounded-xl border-2 border-gray-200">
+    </div>`;
+  } else {
+    left += `<div class="q-content text-gray-800 leading-relaxed text-[15px] mb-4 font-medium">
+      ${q.question_html || q.question || ''}
+    </div>`;
+  }
+
+  if (opts.length) {
+    left += opts.map(l => `
+      <button class="opt-btn" id="opt-${l}"
+              onclick="answer('${l}', '${q.answer||''}')">
+        <div class="opt-circle">${l}</div>
+        <div>${getOpt(q, l)}</div>
+      </button>`).join('');
+  } else {
+    // Image question — reveal button
+    left += `<button onclick="reveal()"
+      class="neo-btn neo-btn-yellow w-full mt-4" id="reveal-btn">
+      Show Answer →
+    </button>`;
+  }
+
+  document.getElementById('sess-q').innerHTML = left;
+
+  // Hide right panel + action bar
+  const exp = document.getElementById('sess-exp');
+  exp.style.display = 'none';
+  document.getElementById('action-bar').style.display = 'none';
+
+  // Exam timer
+  clearInterval(qTimerInt);
+  qElapsed = 0;
+  if (MODE === 'exam') {
+    qTimerInt = setInterval(() => {
+      qElapsed++;
+      const rem = PER_Q - qElapsed;
+      const el  = document.getElementById('timer');
+      el.textContent = rem + 's';
+      rem <= 10 ? el.classList.add('timer-warn') : el.classList.remove('timer-warn');
+      if (rem <= 0) { clearInterval(qTimerInt); autoSkip(); }
+    }, 1000);
+  }
+
+  // Scroll tops
+  document.getElementById('sess-q').scrollTop = 0;
+  exp.scrollTop = 0;
+}
+
+// ── Answer / reveal ────────────────────────────────────
+function answer(chosen, correct) {
+  if (answered) return;
+  answered = true;
+  clearInterval(qTimerInt);
+
+  const isCorrect = chosen === correct;
+  isCorrect ? stats.correct++ : stats.incorrect++;
+
+  ['A','B','C','D'].forEach(l => {
+    const btn = document.getElementById('opt-' + l);
+    if (!btn) return;
+    btn.disabled = true;
+    if (l === correct)      btn.classList.add('correct');
+    else if (l === chosen)  btn.classList.add('wrong');
+  });
+
+  showExp(questions[curIdx]);
+  submitAnswer(chosen, isCorrect);
+}
+
+function reveal() {
+  if (answered) return;
+  answered = true;
+  stats.skipped++;
+  showExp(questions[curIdx]);
+}
+
+function autoSkip() {
+  if (!answered) { answered = true; stats.skipped++; showExp(questions[curIdx]); }
+}
+
+// ── Show explanation ──────────────────────────────────
+function showExp(q) {
+  const exp = document.getElementById('sess-exp');
+  exp.style.display = 'flex';
+
+  document.getElementById('exp-mcq-id').textContent = q.mcq_id || '';
+
+  let html = '';
+  if (q.explanation_image) {
+    html = `<img src="/images/${q.explanation_image}" alt="Explanation"
+                 class="w-full rounded-xl border-2 border-amber-200 cursor-zoom-in"
+                 onclick="lightbox('/images/${q.explanation_image}')">`;
+  } else if (q.explanation) {
+    const imgs = (q.images||[]).map(f =>
+      `<img src="/images/${f}" alt="" class="max-w-full rounded-xl my-2 border cursor-zoom-in"
+            onclick="lightbox('/images/${f}')">`).join('');
+    html = `<div class="text-sm text-gray-700 leading-relaxed q-content">
+      ${q.explanation_html || q.explanation}${imgs}
+    </div>`;
+  } else {
+    html = '<div class="text-gray-300 text-sm text-center py-6">No explanation recorded</div>';
+  }
+  document.getElementById('exp-body').innerHTML = html;
+
+  // Action bar
+  document.getElementById('action-bar').style.display = 'flex';
+  const cr = document.getElementById('conf-row');
+  cr.style.display = (MODE !== 'exam') ? 'flex' : 'none';
+}
+
+// ── FSRS rate ─────────────────────────────────────────
+async function rate(rating) {
+  await apiPost('/api/fsrs/review', {
+    question_id: questions[curIdx].question_id,
+    rating, session_id: SESSION_ID,
+  }).catch(() => {});
+  nextQuestion();
+}
+
+async function submitAnswer(chosen, isCorrect) {
+  await apiPost('/api/study/answer', {
+    session_id  : SESSION_ID,
+    question_id : questions[curIdx].question_id,
+    answer_given: chosen,
+    is_correct  : isCorrect,
+    time_taken  : qElapsed,
+  }).catch(() => {});
+}
+
+function nextQuestion() {
+  if (curIdx + 1 >= questions.length) showDone();
+  else showQuestion(curIdx + 1);
+}
+
+// ── Done ──────────────────────────────────────────────
+async function showDone() {
+  clearInterval(timerInt); clearInterval(qTimerInt);
+  await apiPost(`/api/study/session/${SESSION_ID}/end`, {
+    duration_sec: elapsed,
+    correct     : stats.correct,
+    incorrect   : stats.incorrect,
+  }).catch(() => {});
+
+  document.getElementById('q-card').style.display   = 'none';
+  document.getElementById('done-card').style.display = 'block';
+
+  const total = stats.correct + stats.incorrect + stats.skipped;
+  const pct   = total ? Math.round(stats.correct / total * 100) : 0;
+  const col   = pct >= 70 ? 'var(--green)' : pct >= 50 ? '#f59e0b' : 'var(--coral)';
+
+  document.getElementById('done-stats').innerHTML = `
+    <div class="neo-card-flat p-4 text-center">
+      <div class="text-3xl font-black text-green-700">${stats.correct}</div>
+      <div class="text-xs text-gray-500 font-semibold mt-1">Correct</div>
+    </div>
+    <div class="neo-card-flat p-4 text-center" style="border-color:${col}">
+      <div class="text-3xl font-black" style="color:${col}">${pct}%</div>
+      <div class="text-xs text-gray-500 font-semibold mt-1">Accuracy</div>
+    </div>
+    <div class="neo-card-flat p-4 text-center">
+      <div class="text-3xl font-black text-red-500">${stats.incorrect}</div>
+      <div class="text-xs text-gray-500 font-semibold mt-1">Incorrect</div>
+    </div>`;
+}
+
+async function endSession() {
+  if (confirm('End session now?')) showDone();
+}
+
+function lightbox(src) {
+  const d = document.createElement('div');
+  d.className = 'fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4';
+  d.onclick = () => d.remove();
+  d.innerHTML = `<div class="relative max-w-5xl w-full" onclick="event.stopPropagation()">
+    <img src="${src}" class="max-w-full max-h-[92vh] object-contain rounded-xl mx-auto block"
+         style="image-rendering:crisp-edges">
+    <button onclick="this.closest('.fixed').remove()"
+            class="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-black
+                   font-black text-sm border-2 border-black flex items-center justify-center">✕</button>
+  </div>`;
+  document.body.appendChild(d);
+}
+
+init();
+</script>
+{% endblock %}
